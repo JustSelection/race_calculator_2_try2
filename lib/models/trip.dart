@@ -16,22 +16,26 @@ class Trip {
     required this.remaining, required this.distance, required this.consumption,
   });
 
+  // ✅ Helper для округления до сотых
+  static double _round2(double value) => double.parse(value.toStringAsFixed(2));
+
   Map<String, dynamic> toJson() => {
     'id': id, 'date': date.toIso8601String(),
-    'startOdo': startOdo, 'endOdo': endOdo,
-    'fuelDeparture': fuelDeparture, 'fuelAdded': fuelAdded,
-    'remaining': remaining, 'distance': distance, 'consumption': consumption,
+    'startOdo': _round2(startOdo), 'endOdo': _round2(endOdo),
+    'fuelDeparture': _round2(fuelDeparture), 'fuelAdded': _round2(fuelAdded),
+    'remaining': _round2(remaining), 'distance': _round2(distance),
+    'consumption': consumption,
   };
 
   factory Trip.fromJson(Map<String, dynamic> json) => Trip(
     id: json['id'] as String,
     date: DateTime.parse(json['date'] as String),
-    startOdo: (json['startOdo'] as num).toDouble(),
-    endOdo: (json['endOdo'] as num).toDouble(),
-    fuelDeparture: (json['fuelDeparture'] as num).toDouble(),
-    fuelAdded: (json['fuelAdded'] as num).toDouble(),
-    remaining: (json['remaining'] as num).toDouble(),
-    distance: (json['distance'] as num).toDouble(),
+    startOdo: _round2((json['startOdo'] as num).toDouble()),
+    endOdo: _round2((json['endOdo'] as num).toDouble()),
+    fuelDeparture: _round2((json['fuelDeparture'] as num).toDouble()),
+    fuelAdded: _round2((json['fuelAdded'] as num).toDouble()),
+    remaining: _round2((json['remaining'] as num).toDouble()),
+    distance: _round2((json['distance'] as num).toDouble()),
     consumption: (json['consumption'] as num).toDouble(),
   );
 }

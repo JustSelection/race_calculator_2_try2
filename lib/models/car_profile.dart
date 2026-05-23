@@ -4,6 +4,7 @@ class CarProfile {
   String plate;
   double consumption;
   double currentOdo;
+  double fuelInTank;
 
   CarProfile({
     required this.id,
@@ -11,11 +12,13 @@ class CarProfile {
     required this.plate,
     required this.consumption,
     required this.currentOdo,
+    this.fuelInTank = 0.0,
   });
 
   Map<String, dynamic> toJson() => {
     'id': id, 'brand': brand, 'plate': plate,
     'consumption': consumption, 'currentOdo': currentOdo,
+    'fuelInTank': fuelInTank,
   };
 
   factory CarProfile.fromJson(Map<String, dynamic> json) => CarProfile(
@@ -24,5 +27,8 @@ class CarProfile {
     plate: json['plate'] as String,
     consumption: (json['consumption'] as num).toDouble(),
     currentOdo: (json['currentOdo'] as num).toDouble(),
+    fuelInTank: json['fuelInTank'] != null 
+        ? (json['fuelInTank'] as num).toDouble() 
+        : 0.0,
   );
 }

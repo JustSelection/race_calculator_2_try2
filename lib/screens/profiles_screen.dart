@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../models/car_profile.dart';
 import '../models/trip.dart';
@@ -39,6 +40,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     final plateCtrl = TextEditingController(text: car?.plate ?? '');
     final consCtrl = TextEditingController(text: car?.consumption.toString() ?? '');
     final odoCtrl = TextEditingController(text: car?.currentOdo.toString() ?? '');
+    final fuelCtrl = TextEditingController(text: (car?.fuelInTank ?? 0.0).toStringAsFixed(2));
     final isEdit = car != null;
 
     showDialog(
@@ -53,6 +55,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
               TextField(controller: plateCtrl, decoration: const InputDecoration(labelText: 'Госномер')),
               TextField(controller: consCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Расход (л/100км)')),
               TextField(controller: odoCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Текущий пробег (км)')),
+              TextField(controller: fuelCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Топливо в баке (л)')),
             ],
           ),
         ),
@@ -64,13 +67,14 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
               final plate = plateCtrl.text.trim();
               final cons = double.tryParse(consCtrl.text);
               final odo = double.tryParse(odoCtrl.text);
+              final fuel = double.tryParse(fuelCtrl.text) ?? 0.0;
               if (brand.isEmpty || plate.isEmpty || cons == null || odo == null) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Заполните все поля')));
                 return;
               }
               final profile = isEdit
-                  ? CarProfile(id: car.id, brand: brand, plate: plate, consumption: cons, currentOdo: odo)
-                  : CarProfile(id: _uuid.v4(), brand: brand, plate: plate, consumption: cons, currentOdo: odo);
+                  ? CarProfile(id: car.id, brand: brand, plate: plate, consumption: cons, currentOdo: odo, fuelInTank: fuel)
+                  : CarProfile(id: _uuid.v4(), brand: brand, plate: plate, consumption: cons, currentOdo: odo, fuelInTank: fuel);
               
               final all = await StorageService.loadProfiles();
               if (isEdit) {
@@ -115,9 +119,40 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     widget.onCarSelected?.call();
   }
 
+  // ✅ Исправленный _deleteTrip с подтверждением и обработкой ошибок
   Future<void> _deleteTrip(CarProfile car, Trip trip) async {
-    await StorageService.deleteTrip(car.brand, car.plate, trip.id);
-    _loadTrips(car);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Удалить рейс?'),
+        content: Text(
+          'Удалить рейс от ${DateFormat('dd.MM.yyyy').format(trip.date)}?\n\n'
+          '🛣 ${trip.startOdo.toStringAsFixed(0)} → ${trip.endOdo.toStringAsFixed(0)} км\n'
+          '⛽ Остаток: ${trip.remaining.toStringAsFixed(2)} л',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed != true || !mounted) return;
+    
+    try {
+      await StorageService.deleteTrip(car.brand, car.plate, trip.id);
+      if (mounted) {
+        _loadTrips(car);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Рейс удалён')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+      }
+    }
   }
 
   void _toggleExpand(CarProfile car) {
@@ -159,7 +194,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
               children: [
                 ListTile(
                   title: Text('${car.brand} ${car.plate}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('Расход: ${car.consumption} л/100км • Пробег: ${car.currentOdo.toStringAsFixed(0)} км'),
+                  subtitle: Text('Расход: ${car.consumption} л/100км • Пробег: ${car.currentOdo.toStringAsFixed(0)} км • Бак: ${car.fuelInTank.toStringAsFixed(2)} л'),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

@@ -43,17 +43,14 @@ class CalculatorScreenState extends State<CalculatorScreen> {
     if (mounted) setState(() => _cars = cars);
   }
 
-  // ✅ ПУБЛИЧНЫЙ метод для обновления извне
   void refreshCars() {
     _loadCars().then((_) {
       if (!mounted) return;
       if (_selectedCar != null) {
-        // ✅ Находим объект в новом списке по id
         final found = _cars.firstWhere(
           (c) => c.id == _selectedCar!.id,
           orElse: () => _selectedCar!,
         );
-        // Если авто удалён — сбрасываем
         if (!_cars.any((c) => c.id == _selectedCar!.id)) {
           _selectedCar = null;
           _startOdoCtrl.clear();
@@ -66,7 +63,6 @@ class CalculatorScreenState extends State<CalculatorScreen> {
     });
   }
 
-  // ✅ Helper: возвращает объект ИЗ списка или null
   CarProfile? _getValidSelectedCar() {
     if (_selectedCar == null) return null;
     for (final car in _cars) {
@@ -75,49 +71,61 @@ class CalculatorScreenState extends State<CalculatorScreen> {
     return null;
   }
 
-  Future<void> _onCarSelected(CarProfile? car) async {
-    if (car == null || !mounted) return;
-    _selectedCar = car;
-    final trips = await StorageService.loadTrips(car.brand, car.plate);
-    if (!mounted) return;
-    final last = trips.isNotEmpty ? trips.first : null;
-    _startOdoCtrl.text = (last?.endOdo ?? car.currentOdo).toString();
-    _fuelDepCtrl.text = (last?.remaining ?? 0.0).toString();
-    setState(() {});
-  }
+  // ✅ Helper для округления до сотых
+  double _round2(double value) => double.parse(value.toStringAsFixed(2));
+
+Future<void> _onCarSelected(CarProfile? car) async {
+  if (car == null || !mounted) return;
+  _selectedCar = car;
+  final trips = await StorageService.loadTrips(car.brand, car.plate);
+  if (!mounted) return;
+  final last = trips.isNotEmpty ? trips.first : null;
+  
+  _startOdoCtrl.text = _round2(last?.endOdo ?? car.currentOdo).toStringAsFixed(0);
+  _fuelDepCtrl.text = _round2(last?.remaining ?? car.fuelInTank).toStringAsFixed(2); // ✅
+  
+  setState(() {});
+}
 
   void _calculate() {
-    final start = double.tryParse(_startOdoCtrl.text);
-    final end = double.tryParse(_endOdoCtrl.text);
-    final fuelDep = double.tryParse(_fuelDepCtrl.text);
-    final fuelAdd = double.tryParse(_fuelAddCtrl.text);
+    // ✅ Округляем входные значения сразу после парсинга
+    final start = _round2(double.tryParse(_startOdoCtrl.text) ?? 0);
+    final end = _round2(double.tryParse(_endOdoCtrl.text) ?? 0);
+    final fuelDep = _round2(double.tryParse(_fuelDepCtrl.text) ?? 0);
+    final fuelAdd = _round2(double.tryParse(_fuelAddCtrl.text) ?? 0);
     final cons = _selectedCar?.consumption;
 
-    if (start == null || end == null || fuelDep == null || fuelAdd == null || cons == null || end <= start) {
+    if (start == 0 || end == 0 || fuelDep < 0 || fuelAdd < 0 || cons == null || end <= start) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Заполните все поля корректно')));
       return;
     }
 
-    final distance = end - start;
-    double consumed = (distance / 100) * cons;
-    double remaining = fuelDep + fuelAdd - consumed;
+    final distance = _round2(end - start);
+    double consumed = _round2((distance / 100) * cons);
+    double remaining = _round2(fuelDep + fuelAdd - consumed);
     double finalEnd = end;
 
     if (remaining < 3.0) {
-      final maxDist = (fuelDep + fuelAdd - 3.0) * (100 / cons);
-      finalEnd = start + maxDist;
+      final maxDist = _round2((fuelDep + fuelAdd - 3.0) * (100 / cons));
+      finalEnd = _round2(start + maxDist);
       remaining = 3.0;
-      consumed = fuelDep + fuelAdd - 3.0;
+      consumed = _round2(fuelDep + fuelAdd - 3.0);
     }
 
     _pendingTrip = Trip(
       id: _uuid.v4(),
       date: DateFormat('dd.MM.yyyy').parse(_dateCtrl.text),
-      startOdo: start, endOdo: finalEnd,
-      fuelDeparture: fuelDep, fuelAdded: fuelAdd,
-      remaining: remaining, distance: finalEnd - start, consumption: cons,
+      startOdo: start,
+      endOdo: finalEnd,
+      fuelDeparture: fuelDep,
+      fuelAdded: fuelAdd,
+      remaining: remaining,
+      distance: _round2(finalEnd - start),
+      consumption: cons,
     );
+
+    final fuelUsed = _round2(fuelDep + fuelAdd - remaining);
 
     _resultText = '''--- Результат ---
 Дата: ${DateFormat('dd.MM.yyyy').format(_pendingTrip!.date)}
@@ -131,6 +139,7 @@ class CalculatorScreenState extends State<CalculatorScreen> {
 Дистанция: ${_pendingTrip!.distance.toStringAsFixed(1)} км
 Расход: ${_pendingTrip!.consumption.toStringAsFixed(0)} л/100км
 Топливо на момент выезда: ${_pendingTrip!.fuelDeparture.toStringAsFixed(2)} л
+Затрачено топлива: ${fuelUsed.toStringAsFixed(2)} л
 Остаток топлива: ${_pendingTrip!.remaining.toStringAsFixed(2)} л''';
     setState(() {});
   }
@@ -144,19 +153,30 @@ class CalculatorScreenState extends State<CalculatorScreen> {
   }
 
   Future<void> _save() async {
-    if (_pendingTrip == null || _selectedCar == null || !mounted) return;
-    await StorageService.saveTrip(_selectedCar!.brand, _selectedCar!.plate, _pendingTrip!);
+  if (_pendingTrip == null || _selectedCar == null || !mounted) return;
+
+  await StorageService.saveTrip(_selectedCar!.brand, _selectedCar!.plate, _pendingTrip!);
+  
+  if (!mounted) return;
+
+  final allProfiles = await StorageService.loadProfiles();
+  final idx = allProfiles.indexWhere((c) => c.id == _selectedCar!.id);
+  if (idx != -1) {
+    allProfiles[idx].currentOdo = _pendingTrip!.endOdo;
+    allProfiles[idx].fuelInTank = _pendingTrip!.remaining; // ✅ Обновляем топливо
+    await StorageService.saveProfiles(allProfiles);
     
-    if (!mounted) return;
-    final idx = _cars.indexWhere((c) => c.id == _selectedCar!.id);
-    if (idx != -1) {
-      _cars[idx].currentOdo = _pendingTrip!.endOdo;
-      await StorageService.saveProfiles(_cars);
-    }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Сохранено')));
-    setState(() { _pendingTrip = null; _resultText = null; });
+    setState(() {
+      _cars = allProfiles;
+      _pendingTrip = null;
+      _resultText = null;
+    });
   }
+  
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Сохранено')));
+  }
+}
 
   Widget _field(String label, TextEditingController ctrl, {String? hint}) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6.0),
@@ -176,8 +196,6 @@ class CalculatorScreenState extends State<CalculatorScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _field('Дата', _dateCtrl, hint: 'dd.MM.yyyy'),
-            
-            // ✅ FIX: value берётся ТОЛЬКО из списка _cars
             DropdownButtonFormField<CarProfile>(
               // ignore: deprecated_member_use
               value: _getValidSelectedCar(),
@@ -186,7 +204,6 @@ class CalculatorScreenState extends State<CalculatorScreen> {
               onChanged: _onCarSelected,
               decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Автомобиль'),
             ),
-            
             const SizedBox(height: 12),
             _field('Начальный пробег (км)', _startOdoCtrl),
             _field('Конечный пробег (км)', _endOdoCtrl),
