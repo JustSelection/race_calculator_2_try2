@@ -10,8 +10,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
-  // ✅ Публичный тип: CalculatorScreenState (без подчёркивания!)
+  
+  // ✅ Ключи для управления состоянием экранов
   final _calculatorKey = GlobalKey<CalculatorScreenState>();
+  final _profilesKey = GlobalKey<ProfilesScreenState>(); // ✅ Новый ключ
 
   @override
   Widget build(BuildContext context) {
@@ -20,11 +22,13 @@ class _HomeScreenState extends State<HomeScreen> {
         index: _currentIndex,
         children: [
           CalculatorScreen(key: _calculatorKey),
-          // ✅ onCarSelected (НЕ onProfileChanged!)
           ProfilesScreen(
+            key: _profilesKey, // ✅ Передаём ключ
             onCarSelected: () {
-              final state = _calculatorKey.currentState;
-              if (state != null) state.refreshCars();
+              // ✅ Синхронизируем калькулятор при изменении профиля
+              _calculatorKey.currentState?.refreshCars();
+              // ✅ И перезагружаем профили
+              _profilesKey.currentState?.reloadData();
             },
           ),
         ],
@@ -34,9 +38,15 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedItemColor: Theme.of(context).primaryColor,
         onTap: (i) {
           setState(() => _currentIndex = i);
+          
+          // ✅ При переключении на калькулятор — обновляем список авто
           if (i == 0) {
-            final state = _calculatorKey.currentState;
-            if (state != null) state.refreshCars();
+            _calculatorKey.currentState?.refreshCars();
+          }
+          
+          // ✅ При переключении на профили — перезагружаем данные из хранилища
+          if (i == 1) {
+            _profilesKey.currentState?.reloadData();
           }
         },
         items: const [

@@ -10,10 +10,11 @@ class ProfilesScreen extends StatefulWidget {
   final VoidCallback? onCarSelected;
   const ProfilesScreen({super.key, this.onCarSelected});
   @override
-  State<ProfilesScreen> createState() => _ProfilesScreenState();
+  State<ProfilesScreen> createState() => ProfilesScreenState(); // ✅ ПУБЛИЧНЫЙ
 }
 
-class _ProfilesScreenState extends State<ProfilesScreen> {
+// ✅ ПУБЛИЧНЫЙ класс состояния (убрали подчёркивание)
+class ProfilesScreenState extends State<ProfilesScreen> {
   List<CarProfile> _profiles = [];
   CarProfile? _expandedProfile;
   List<Trip> _expandedTrips = [];
@@ -24,6 +25,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     super.initState();
     _loadProfiles();
   }
+
+  // ✅ ПУБЛИЧНЫЙ метод для внешней перезагрузки данных
+  void reloadData() => _loadProfiles();
 
   Future<void> _loadProfiles() async {
     final profiles = await StorageService.loadProfiles();
@@ -119,7 +123,6 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     widget.onCarSelected?.call();
   }
 
-  // ✅ Исправленный _deleteTrip с подтверждением и обработкой ошибок
   Future<void> _deleteTrip(CarProfile car, Trip trip) async {
     final confirmed = await showDialog<bool>(
       context: context,
