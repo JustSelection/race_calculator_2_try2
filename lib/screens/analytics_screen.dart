@@ -57,39 +57,51 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       return;
     }
 
-    // ✅ Актуальные данные из последнего рейса
     final lastTrip = _trips.first;
     final currentOdo = lastTrip.endOdo;
     final currentFuel = lastTrip.remaining;
 
-    // ✅ Фактический расход: (полный бак − остаток) / дистанция × 100
-    final totalDistance = _trips.fold(0.0, (sum, t) => sum + t.distance);
-    final totalFullTank = _trips.fold(
-      0.0,
-      (sum, t) => sum + t.fuelDeparture + t.fuelAdded,
-    );
-    final totalRemaining = _trips.fold(0.0, (sum, t) => sum + t.remaining);
-    final totalFuelActuallyUsed = (totalFullTank - totalRemaining).toDouble();
-
-    final actualConsumption = totalDistance > 0
-        ? ((totalFuelActuallyUsed / totalDistance) * 100).toDouble()
-        : widget.profile.consumption;
-
-    // ✅ Динамика бака: средний «полный бак» за последние 7 рейсов
+    // ✅ Берём последние 7 рейсов (отсортированы по убыванию даты: [0] = самый свежий)
     final last7 = _trips.take(7).toList();
+
+    // ✅ ФАКТИЧЕСКИЙ РАСХОД: заправки с задержкой на 1 рейс
+    // Заправка в рейсе N компенсирует расход рейса N-1
+    double actualConsumption = widget.profile.consumption;
+    double totalFuelUsed = 0.0;
+
+    if (last7.length >= 2) {
+      // ✅ Расстояние: все 7 рейсов
+      final totalDistance = last7.fold(0.0, (sum, t) => sum + t.distance);
+
+      // ✅ Топливо: пропускаем самый свежий рейс (его заправка ещё не израсходована)
+      // skip(1) берёт рейсы [1]..[6] = 6 рейсов
+      totalFuelUsed = last7.skip(1).fold(0.0, (sum, t) => sum + t.fuelAdded);
+
+      if (totalDistance > 0 && totalFuelUsed > 0) {
+        actualConsumption = (totalFuelUsed / totalDistance * 100).toDouble();
+      }
+    } else {
+      // ✅ Если рейсов < 2 — показываем дефолт, но считаем хотя бы что-то
+      if (last7.isNotEmpty) {
+        totalFuelUsed = last7.first.fuelAdded;
+      }
+    }
+
+    // ✅ Средний «полный бак» — только fuelAdded (что доливали), чтобы не завышать
     final avgFullTank = last7.isEmpty
         ? 0.0
-        : (last7.fold(0.0, (sum, t) => sum + t.fuelDeparture + t.fuelAdded) /
-                  last7.length)
+        : (last7.fold(0.0, (sum, t) => sum + t.fuelAdded) / last7.length)
               .toDouble();
 
-    // ✅ Ожидаемый расход по путевке
-    final expectedFuelForDistance =
-        ((totalDistance / 100) * widget.profile.consumption).toDouble();
+    // ✅ Разница с путевкой: сравниваем фактические заправки с ожидаемым расходом
+    final totalDistanceAll = last7.fold(0.0, (sum, t) => sum + t.distance);
+    final expectedFuel = (totalDistanceAll / 100) * widget.profile.consumption;
+    final diffToWaybill = totalFuelUsed - expectedFuel;
 
-    // ✅ Разница
-    final diffToWaybill = (totalFuelActuallyUsed - expectedFuelForDistance)
-        .toDouble();
+    // ✅ Отладка в консоль (удали после проверки)
+    print(
+      '📊 Analytics debug: trips=${last7.length}, fuelUsed=$totalFuelUsed, dist=$totalDistanceAll, consum=$actualConsumption',
+    );
 
     _cacheHash = hash;
     _cachedData = AnalyticsData(
@@ -97,8 +109,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       avgFullTank: avgFullTank,
       diffToWaybill: diffToWaybill,
       totalTrips: _trips.length,
-      totalDistance: totalDistance,
-      totalFuelUsed: totalFuelActuallyUsed,
+      totalDistance: totalDistanceAll,
+      totalFuelUsed: totalFuelUsed,
       currentOdo: currentOdo,
       currentFuel: currentFuel,
     );
@@ -135,6 +147,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       'Топливо в баке',
                       '${_cachedData?.currentFuel.toStringAsFixed(2) ?? widget.profile.fuelInTank.toStringAsFixed(2)} л',
                     ),
+                    // ✅ Отображаем объем бака, если задан
+                    if (widget.profile.fullTankCapacity > 0)
+                      _row(
+                        'Объем бака',
+                        '${widget.profile.fullTankCapacity.toStringAsFixed(1)} л',
+                        italic: true,
+                      ),
                   ]),
                   const SizedBox(height: 12),
                   _card('⛽ Фактические показатели', [
@@ -144,14 +163,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       '${_cachedData?.totalDistance.toStringAsFixed(1) ?? '0'} км',
                     ),
                     _row(
-                      'Фактический расход',
-                      '${_cachedData?.actualConsumption.toStringAsFixed(2) ?? '0'} л/100км',
+                      'Факт. расход',
+                      _trips.length < 2
+                          ? '${widget.profile.consumption.toStringAsFixed(1)} (мало данных)'
+                          : '${_cachedData?.actualConsumption.toStringAsFixed(2)} л/100км',
                       highlight: true,
-                      color:
-                          (_cachedData?.actualConsumption ?? 0) >
-                              widget.profile.consumption
-                          ? Colors.orange
-                          : Colors.green,
+                      color: _trips.length < 2
+                          ? Colors.grey
+                          : ((_cachedData?.actualConsumption ?? 0) >
+                                    widget.profile.consumption
+                                ? Colors.orange
+                                : Colors.green),
                     ),
                     _row(
                       'Затрачено топлива',
@@ -184,6 +206,41 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           : '—',
                     ),
                   ]),
+
+                  // ✅ ПРЕДУПРЕЖДЕНИЕ ДЛЯ ТОЧНОСТИ
+                  const SizedBox(height: 8),
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.yellow[100],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange[200]!, width: 1),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.lightbulb_outline,
+                          size: 18,
+                          color: Colors.orange[800],
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Заправляйтесь до щелчка перед выездом (1 раз за рейс) — это повысит точность расчётов.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[800],
+                              fontStyle: FontStyle.italic,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                   if (_trips.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     const Text(
@@ -247,19 +304,28 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     child: Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey[600],
-            fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: highlight ? FontWeight.bold : FontWeight.normal,
-            color: color,
-            fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontWeight: highlight ? FontWeight.bold : FontWeight.normal,
+              color: color,
+              fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         ),
       ],
