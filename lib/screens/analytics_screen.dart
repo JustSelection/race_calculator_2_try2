@@ -37,7 +37,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   void _computeAnalytics() {
-    // ✅ Хэш для кэша
     final hash =
         '${_trips.length}_${_trips.fold(0.0, (s, t) => s + t.remaining).toStringAsFixed(2)}';
     if (_cacheHash == hash && _cachedData != null) return;
@@ -60,48 +59,32 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     final lastTrip = _trips.first;
     final currentOdo = lastTrip.endOdo;
     final currentFuel = lastTrip.remaining;
-
-    // ✅ Берём последние 7 рейсов (отсортированы по убыванию даты: [0] = самый свежий)
     final last7 = _trips.take(7).toList();
 
-    // ✅ ФАКТИЧЕСКИЙ РАСХОД: заправки с задержкой на 1 рейс
-    // Заправка в рейсе N компенсирует расход рейса N-1
-    double actualConsumption = widget.profile.consumption;
-    double totalFuelUsed = 0.0;
+    // ✅ ОБЩАЯ ДИСТАНЦИЯ за 7 рейсов
+    final totalDistance = last7.fold(0.0, (sum, t) => sum + t.distance);
 
-    if (last7.length >= 2) {
-      // ✅ Расстояние: все 7 рейсов
-      final totalDistance = last7.fold(0.0, (sum, t) => sum + t.distance);
+    // ✅ ЗАТРАЧЕННОЕ ТОПЛИВО: (выезд + заправка) − остаток
+    final totalFuelUsed = last7.fold(
+      0.0,
+      (sum, t) => sum + (t.fuelDeparture + t.fuelAdded - t.remaining),
+    );
 
-      // ✅ Топливо: пропускаем самый свежий рейс (его заправка ещё не израсходована)
-      // skip(1) берёт рейсы [1]..[6] = 6 рейсов
-      totalFuelUsed = last7.skip(1).fold(0.0, (sum, t) => sum + t.fuelAdded);
+    // ✅ ФАКТИЧЕСКИЙ РАСХОД
+    final actualConsumption = totalDistance > 0
+        ? (totalFuelUsed / totalDistance * 100).toDouble()
+        : widget.profile.consumption;
 
-      if (totalDistance > 0 && totalFuelUsed > 0) {
-        actualConsumption = (totalFuelUsed / totalDistance * 100).toDouble();
-      }
-    } else {
-      // ✅ Если рейсов < 2 — показываем дефолт, но считаем хотя бы что-то
-      if (last7.isNotEmpty) {
-        totalFuelUsed = last7.first.fuelAdded;
-      }
-    }
-
-    // ✅ Средний «полный бак» — только fuelAdded (что доливали), чтобы не завышать
+    // ✅ СРЕДНИЙ «ПОЛНЫЙ БАК»: выезд + заправка
     final avgFullTank = last7.isEmpty
         ? 0.0
-        : (last7.fold(0.0, (sum, t) => sum + t.fuelAdded) / last7.length)
+        : (last7.fold(0.0, (sum, t) => sum + t.fuelDeparture + t.fuelAdded) /
+                  last7.length)
               .toDouble();
 
-    // ✅ Разница с путевкой: сравниваем фактические заправки с ожидаемым расходом
-    final totalDistanceAll = last7.fold(0.0, (sum, t) => sum + t.distance);
-    final expectedFuel = (totalDistanceAll / 100) * widget.profile.consumption;
+    // ✅ РАЗНИЦА С ПУТЕВКОЙ
+    final expectedFuel = (totalDistance / 100) * widget.profile.consumption;
     final diffToWaybill = totalFuelUsed - expectedFuel;
-
-    // ✅ Отладка в консоль (удали после проверки)
-    print(
-      '📊 Analytics debug: trips=${last7.length}, fuelUsed=$totalFuelUsed, dist=$totalDistanceAll, consum=$actualConsumption',
-    );
 
     _cacheHash = hash;
     _cachedData = AnalyticsData(
@@ -109,7 +92,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       avgFullTank: avgFullTank,
       diffToWaybill: diffToWaybill,
       totalTrips: _trips.length,
-      totalDistance: totalDistanceAll,
+      totalDistance: totalDistance,
       totalFuelUsed: totalFuelUsed,
       currentOdo: currentOdo,
       currentFuel: currentFuel,
@@ -147,7 +130,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       'Топливо в баке',
                       '${_cachedData?.currentFuel.toStringAsFixed(2) ?? widget.profile.fuelInTank.toStringAsFixed(2)} л',
                     ),
-                    // ✅ Отображаем объем бака, если задан
                     if (widget.profile.fullTankCapacity > 0)
                       _row(
                         'Объем бака',
@@ -195,19 +177,53 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           ? Colors.red
                           : Colors.blue,
                     ),
-                    _row(
-                      'Рекомендация',
-                      _cachedData != null
-                          ? (_cachedData!.diffToWaybill.abs() < 0.01
-                                ? '✅ Баланс'
-                                : _cachedData!.diffToWaybill > 0
-                                ? '⚠️ Слить ${_cachedData!.diffToWaybill.toStringAsFixed(2)} л'
-                                : '➕ Долить ${(-_cachedData!.diffToWaybill).toStringAsFixed(2)} л')
-                          : '—',
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Рекомендация',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _cachedData != null
+                                ? (_trips.length < 2
+                                      ? '⚠️ Мало данных (нужно ≥2 рейса)'
+                                      : _trips.length < 5
+                                      ? '📊 Предварительно: ${_cachedData!.diffToWaybill.abs() < 0.5
+                                            ? 'баланс'
+                                            : _cachedData!.diffToWaybill > 0
+                                            ? 'слить ~${_cachedData!.diffToWaybill.toStringAsFixed(1)} л'
+                                            : 'долить ~${(-_cachedData!.diffToWaybill).toStringAsFixed(1)} л'}'
+                                      : (_cachedData!.diffToWaybill.abs() < 0.01
+                                            ? '✅ Баланс'
+                                            : _cachedData!.diffToWaybill > 0
+                                            ? '🛢️ Слить ${_cachedData!.diffToWaybill.toStringAsFixed(2)} л'
+                                            : '➕ Долить ${(-_cachedData!.diffToWaybill).toStringAsFixed(2)} л'))
+                                : '—',
+                            style: TextStyle(
+                              fontWeight: _trips.length >= 5
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: _trips.length < 2
+                                  ? Colors.grey
+                                  : _trips.length < 5
+                                  ? Colors.blue[400]
+                                  : (_cachedData?.diffToWaybill ?? 0) > 0
+                                  ? Colors.red
+                                  : Colors.blue,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ]),
-
-                  // ✅ ПРЕДУПРЕЖДЕНИЕ ДЛЯ ТОЧНОСТИ
                   const SizedBox(height: 8),
                   Container(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -240,7 +256,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       ],
                     ),
                   ),
-
                   if (_trips.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     const Text(
@@ -333,10 +348,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   );
 }
 
-// ✅ Модель данных аналитики
 class AnalyticsData {
   final double actualConsumption;
-  final double avgFullTank; // ✅ средний «полный бак»
+  final double avgFullTank;
   final double diffToWaybill;
   final int totalTrips;
   final double totalDistance;
