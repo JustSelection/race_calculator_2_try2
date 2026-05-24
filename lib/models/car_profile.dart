@@ -5,6 +5,7 @@ class CarProfile {
   double consumption;
   double currentOdo;
   double fuelInTank;
+  double fullTankCapacity; // ✅ НОВОЕ ПОЛЕ
 
   CarProfile({
     required this.id,
@@ -13,12 +14,14 @@ class CarProfile {
     required this.consumption,
     required this.currentOdo,
     this.fuelInTank = 0.0,
+    this.fullTankCapacity = 0.0, // ✅ По умолчанию 0
   });
 
   Map<String, dynamic> toJson() => {
     'id': id, 'brand': brand, 'plate': plate,
     'consumption': consumption, 'currentOdo': currentOdo,
     'fuelInTank': fuelInTank,
+    'fullTankCapacity': fullTankCapacity, // ✅
   };
 
   factory CarProfile.fromJson(Map<String, dynamic> json) => CarProfile(
@@ -29,6 +32,9 @@ class CarProfile {
     currentOdo: (json['currentOdo'] as num).toDouble(),
     fuelInTank: json['fuelInTank'] != null 
         ? (json['fuelInTank'] as num).toDouble() 
+        : 0.0,
+    fullTankCapacity: json['fullTankCapacity'] != null // ✅ Обратная совместимость
+        ? (json['fullTankCapacity'] as num).toDouble() 
         : 0.0,
   );
 }

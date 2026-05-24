@@ -42,9 +42,18 @@ class ProfilesScreenState extends State<ProfilesScreen> {
   void _showAddEditDialog([CarProfile? car]) {
     final brandCtrl = TextEditingController(text: car?.brand ?? '');
     final plateCtrl = TextEditingController(text: car?.plate ?? '');
-    final consCtrl = TextEditingController(text: car?.consumption.toString() ?? '');
-    final odoCtrl = TextEditingController(text: car?.currentOdo.toString() ?? '');
-    final fuelCtrl = TextEditingController(text: (car?.fuelInTank ?? 0.0).toStringAsFixed(2));
+    final consCtrl = TextEditingController(
+      text: car?.consumption.toString() ?? '',
+    );
+    final odoCtrl = TextEditingController(
+      text: car?.currentOdo.toString() ?? '',
+    );
+    final fuelCtrl = TextEditingController(
+      text: (car?.fuelInTank ?? 0.0).toStringAsFixed(2),
+    );
+    final capacityCtrl = TextEditingController(
+      text: (car?.fullTankCapacity ?? 0.0).toStringAsFixed(1),
+    );
     final isEdit = car != null;
 
     showDialog(
@@ -55,16 +64,48 @@ class ProfilesScreenState extends State<ProfilesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: brandCtrl, decoration: const InputDecoration(labelText: 'Марка')),
-              TextField(controller: plateCtrl, decoration: const InputDecoration(labelText: 'Госномер')),
-              TextField(controller: consCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Расход (л/100км)')),
-              TextField(controller: odoCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Текущий пробег (км)')),
-              TextField(controller: fuelCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Топливо в баке (л)')),
+              TextField(
+                controller: brandCtrl,
+                decoration: const InputDecoration(labelText: 'Марка'),
+              ),
+              TextField(
+                controller: plateCtrl,
+                decoration: const InputDecoration(labelText: 'Госномер'),
+              ),
+              TextField(
+                controller: consCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Расход (л/100км)',
+                ),
+              ),
+              TextField(
+                controller: odoCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Текущий пробег (км)',
+                ),
+              ),
+              TextField(
+                controller: fuelCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Топливо в баке (л)',
+                ),
+              ),
+              TextField(
+                controller: capacityCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Объем бака (л)'),
+              ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
           ElevatedButton(
             onPressed: () async {
               final brand = brandCtrl.text.trim();
@@ -72,14 +113,36 @@ class ProfilesScreenState extends State<ProfilesScreen> {
               final cons = double.tryParse(consCtrl.text);
               final odo = double.tryParse(odoCtrl.text);
               final fuel = double.tryParse(fuelCtrl.text) ?? 0.0;
-              if (brand.isEmpty || plate.isEmpty || cons == null || odo == null) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Заполните все поля')));
+              final capacity = double.tryParse(capacityCtrl.text) ?? 0.0;
+              if (brand.isEmpty ||
+                  plate.isEmpty ||
+                  cons == null ||
+                  odo == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Заполните все поля')),
+                );
                 return;
               }
               final profile = isEdit
-                  ? CarProfile(id: car.id, brand: brand, plate: plate, consumption: cons, currentOdo: odo, fuelInTank: fuel)
-                  : CarProfile(id: _uuid.v4(), brand: brand, plate: plate, consumption: cons, currentOdo: odo, fuelInTank: fuel);
-              
+                  ? CarProfile(
+                      id: car.id,
+                      brand: brand,
+                      plate: plate,
+                      consumption: cons,
+                      currentOdo: odo,
+                      fuelInTank: fuel,
+                      fullTankCapacity: capacity,
+                    )
+                  : CarProfile(
+                      id: _uuid.v4(),
+                      brand: brand,
+                      plate: plate,
+                      consumption: cons,
+                      currentOdo: odo,
+                      fuelInTank: fuel,
+                      fullTankCapacity: capacity,
+                    );
+
               final all = await StorageService.loadProfiles();
               if (isEdit) {
                 final idx = all.indexWhere((p) => p.id == profile.id);
@@ -108,13 +171,19 @@ class ProfilesScreenState extends State<ProfilesScreen> {
         title: const Text('Удалить профиль?'),
         content: Text('Удалить ${car.brand} ${car.plate} со всей историей?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Удалить', style: TextStyle(color: Colors.red))),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
-    
+
     var all = await StorageService.loadProfiles();
     all.removeWhere((p) => p.id == car.id);
     await StorageService.saveProfiles(all);
@@ -134,26 +203,33 @@ class ProfilesScreenState extends State<ProfilesScreen> {
           '⛽ Остаток: ${trip.remaining.toStringAsFixed(2)} л',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
           TextButton(
-            onPressed: () => Navigator.pop(context, true), 
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
             child: const Text('Удалить', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
-    
+
     if (confirmed != true || !mounted) return;
-    
+
     try {
       await StorageService.deleteTrip(car.brand, car.plate, trip.id);
       if (mounted) {
         _loadTrips(car);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Рейс удалён')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Рейс удалён')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
       }
     }
   }
@@ -176,9 +252,17 @@ class ProfilesScreenState extends State<ProfilesScreen> {
           IconButton(
             icon: const Icon(Icons.analytics),
             tooltip: 'Аналитика',
-            onPressed: _expandedProfile == null ? null : () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => AnalyticsScreen(profile: _expandedProfile!)));
-            },
+            onPressed: _expandedProfile == null
+                ? null
+                : () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            AnalyticsScreen(profile: _expandedProfile!),
+                      ),
+                    );
+                  },
           ),
         ],
       ),
@@ -196,13 +280,25 @@ class ProfilesScreenState extends State<ProfilesScreen> {
             child: Column(
               children: [
                 ListTile(
-                  title: Text('${car.brand} ${car.plate}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('Расход: ${car.consumption} л/100км • Пробег: ${car.currentOdo.toStringAsFixed(0)} км • Бак: ${car.fuelInTank.toStringAsFixed(2)} л'),
+                  title: Text(
+                    '${car.brand} ${car.plate}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  // 🔁 Замени subtitle на:
+                  subtitle: Text(
+                    'Расход: ${car.consumption} л/100км • Пробег: ${car.currentOdo.toStringAsFixed(0)} км • Бак: ${car.fuelInTank.toStringAsFixed(2)} л / ${car.fullTankCapacity.toStringAsFixed(1)} л',
+                  ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton(icon: const Icon(Icons.edit), onPressed: () => _showAddEditDialog(car)),
-                      IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _deleteProfile(car)),
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => _showAddEditDialog(car),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteProfile(car),
+                      ),
                       Icon(expanded ? Icons.expand_less : Icons.expand_more),
                     ],
                   ),
@@ -215,39 +311,60 @@ class ProfilesScreenState extends State<ProfilesScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('История рейсов:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Text(
+                          'История рейсов:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         const SizedBox(height: 8),
                         if (_expandedTrips.isEmpty)
-                          const Text('Нет сохранённых рейсов', style: TextStyle(color: Colors.grey))
+                          const Text(
+                            'Нет сохранённых рейсов',
+                            style: TextStyle(color: Colors.grey),
+                          )
                         else
                           ListView.separated(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: _expandedTrips.length,
-                            separatorBuilder: (context, index) => const Divider(height: 1),  
+                            separatorBuilder: (context, index) =>
+                                const Divider(height: 1),
                             itemBuilder: (_, j) {
                               final trip = _expandedTrips[j];
                               return ListTile(
                                 dense: true,
-                                title: Text('📅 ${trip.date.day}.${trip.date.month}.${trip.date.year}'),
-                                subtitle: Text('🛣 ${trip.startOdo.toStringAsFixed(0)} → ${trip.endOdo.toStringAsFixed(0)} км • ⛽ ${trip.remaining.toStringAsFixed(2)} л ост.'),
+                                title: Text(
+                                  '📅 ${trip.date.day}.${trip.date.month}.${trip.date.year}',
+                                ),
+                                subtitle: Text(
+                                  '🛣 ${trip.startOdo.toStringAsFixed(0)} → ${trip.endOdo.toStringAsFixed(0)} км • ⛽ ${trip.remaining.toStringAsFixed(2)} л ост.',
+                                ),
                                 trailing: IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.grey,
+                                  ),
                                   onPressed: () => _deleteTrip(car, trip),
                                 ),
                                 onTap: () => showDialog(
                                   context: context,
                                   builder: (_) => AlertDialog(
                                     title: const Text('Детали рейса'),
-                                    content: SelectableText('''Дата: ${trip.date.day}.${trip.date.month}.${trip.date.year}
+                                    content: SelectableText(
+                                      '''Дата: ${trip.date.day}.${trip.date.month}.${trip.date.year}
 Нач. пробег: ${trip.startOdo.toStringAsFixed(0)} км
 Кон. пробег: ${trip.endOdo.toStringAsFixed(0)} км
 Дистанция: ${trip.distance.toStringAsFixed(1)} км
 Расход: ${trip.consumption.toStringAsFixed(0)} л/100км
 Топливо на выезде: ${trip.fuelDeparture.toStringAsFixed(2)} л
 Заправлено: ${trip.fuelAdded.toStringAsFixed(2)} л
-Остаток: ${trip.remaining.toStringAsFixed(2)} л'''),
-                                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Закрыть'))],
+Остаток: ${trip.remaining.toStringAsFixed(2)} л''',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text('Закрыть'),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               );
