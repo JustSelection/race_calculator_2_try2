@@ -7,6 +7,7 @@ import '../services/storage_service.dart';
 class AnalyticsScreen extends StatefulWidget {
   final CarProfile profile;
   const AnalyticsScreen({super.key, required this.profile});
+
   @override
   State<AnalyticsScreen> createState() => _AnalyticsScreenState();
 }
@@ -28,6 +29,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       widget.profile.brand,
       widget.profile.plate,
     );
+    // Сортировка по дате от новых к старым
+    trips.sort((a, b) => b.date.compareTo(a.date));
+
     if (!mounted) return;
     setState(() {
       _trips = trips;
@@ -56,34 +60,52 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       return;
     }
 
-    final lastTrip = _trips.first;
+    final lastTrip = _trips.first; // Самый новый рейс
     final currentOdo = lastTrip.endOdo;
     final currentFuel = lastTrip.remaining;
-    final last7 = _trips.take(7).toList();
 
-    // ✅ ОБЩАЯ ДИСТАНЦИЯ за 7 рейсов
-    final totalDistance = last7.fold(0.0, (sum, t) => sum + t.distance);
+    // Берем последние 7 рейсов (включая самый последний)
+    final allRelevantTrips = _trips.take(7).toList();
 
-    // ✅ ЗАТРАЧЕННОЕ ТОПЛИВО: (выезд + заправка) − остаток
-    final totalFuelUsed = last7.fold(
+    // Для расчета фактического расхода исключаем самый последний рейс
+    final tripsForConsumption = allRelevantTrips.length > 1
+        ? allRelevantTrips
+              .skip(1)
+              .toList() // Пропускаем первый (последний по времени)
+        : [];
+
+    // Общая дистанция за последние 5-7 рейсов (кроме последнего)
+    final totalDistance = tripsForConsumption.fold(
       0.0,
-      (sum, t) => sum + (t.fuelDeparture + t.fuelAdded - t.remaining),
+      (sum, t) => sum + t.distance,
     );
 
-    // ✅ ФАКТИЧЕСКИЙ РАСХОД
+    // Затраченное топливо за последние 5-7 рейсов (кроме последнего):
+    // (топливо на выезде + заправлено) - топливо на въезде
+    final totalFuelUsed = tripsForConsumption.fold(
+      0.0,
+      (sum, t) => sum + ((t.fuelDeparture + t.fuelAdded) - t.remaining),
+    );
+
+    // Фактический расход: (затрачено топлива) / (рейсовый пробег) * 100
     final actualConsumption = totalDistance > 0
         ? (totalFuelUsed / totalDistance * 100).toDouble()
         : widget.profile.consumption;
 
-    // ✅ СРЕДНИЙ «ПОЛНЫЙ БАК»: выезд + заправка
-    final avgFullTank = last7.isEmpty
+    // Средний "полный бак" за последние 5-7 рейсов (кроме последнего): (топливо на выезде + заправлено)
+    final avgFullTank = tripsForConsumption.isEmpty
         ? 0.0
-        : (last7.fold(0.0, (sum, t) => sum + t.fuelDeparture + t.fuelAdded) /
-                  last7.length)
+        : (tripsForConsumption.fold(
+                    0.0,
+                    (sum, t) => sum + t.fuelDeparture + t.fuelAdded,
+                  ) /
+                  tripsForConsumption.length)
               .toDouble();
 
-    // ✅ РАЗНИЦА С ПУТЕВКОЙ
+    // Ожидаемое топливо по путевке за дни, использованные для расхода
     final expectedFuel = (totalDistance / 100) * widget.profile.consumption;
+
+    // Разница с путевкой: затрачено - ожидаемо
     final diffToWaybill = totalFuelUsed - expectedFuel;
 
     _cacheHash = hash;
@@ -168,7 +190,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                   ]),
                   const SizedBox(height: 12),
-                  _card('🔄 Динамика бака (7 рейсов)', [
+                  _card('🔄 Динамика бака (5-7 рейсов)', [
                     _row(
                       'Разница с путевкой',
                       '${_cachedData?.diffToWaybill.toStringAsFixed(2) ?? '0'} л',

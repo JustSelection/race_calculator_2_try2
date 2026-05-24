@@ -1,5 +1,5 @@
-name: race_calculator_2_try2
-description: "A new Flutter project."
+name: race_calculator_2
+description: "Race Calculator 2 - приложение для расчета результатов рейса и аналитики."
 
 publish_to: 'none'
 

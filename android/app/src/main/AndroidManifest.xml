@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="race_calculator_2_try2"
+        android:label="Race Calculator 2.0"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
